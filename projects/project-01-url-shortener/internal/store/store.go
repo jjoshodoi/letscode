@@ -2,6 +2,7 @@ package store
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"sync"
 
@@ -13,18 +14,20 @@ type Store interface {
 	Save(code, url string) error
 	Lookup(code string) (string, bool)
 	All() ([]model.URLMapping, error)
+	FindByURL(url string) (string, bool)
 }
 
 // FileStore implements Store using a single JSON file.
 type FileStore struct {
 	path string
 	mu   sync.RWMutex
-	m    map[string]string
+	m    map[string]string // code -> url
+	rev  map[string]string // url -> code
 }
 
 // NewFileStore creates or loads a file-backed store.
 func NewFileStore(path string) *FileStore {
-	fs := &FileStore{path: path, m: make(map[string]string)}
+	fs := &FileStore{path: path, m: make(map[string]string), rev: make(map[string]string)}
 	fs.load()
 	return fs
 }
@@ -33,12 +36,17 @@ func (f *FileStore) load() {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	f.m = make(map[string]string)
+	f.rev = make(map[string]string)
 	file, err := os.Open(f.path)
 	if err != nil {
 		return
 	}
 	defer file.Close()
 	json.NewDecoder(file).Decode(&f.m)
+	// build reverse index
+	for k, v := range f.m {
+		f.rev[v] = k
+	}
 }
 
 // persistSnapshot writes the provided snapshot to disk without acquiring
@@ -60,13 +68,32 @@ func (f *FileStore) Save(code, url string) error {
 	// the lock. Release the lock before doing file I/O to avoid deadlocks and
 	// keeping I/O off the critical path.
 	f.mu.Lock()
+	// If code already exists
+	if existing, ok := f.m[code]; ok {
+		if existing == url {
+			// already stored; idempotent
+			f.mu.Unlock()
+			return nil
+		}
+		f.mu.Unlock()
+		return fmt.Errorf("code already exists")
+	}
+	// If URL already present mapped to a different code, return existing code error
+	if existingCode, ok := f.rev[url]; ok {
+		if existingCode == code {
+			f.mu.Unlock()
+			return nil
+		}
+		f.mu.Unlock()
+		return fmt.Errorf("url already exists with different code")
+	}
 	f.m[code] = url
+	f.rev[url] = code
 	snapshot := make(map[string]string, len(f.m))
 	for k, v := range f.m {
 		snapshot[k] = v
 	}
 	f.mu.Unlock()
-
 	return f.persistSnapshot(snapshot)
 }
 
@@ -75,6 +102,13 @@ func (f *FileStore) Lookup(code string) (string, bool) {
 	defer f.mu.RUnlock()
 	u, ok := f.m[code]
 	return u, ok
+}
+
+func (f *FileStore) FindByURL(url string) (string, bool) {
+	f.mu.RLock()
+	defer f.mu.RUnlock()
+	c, ok := f.rev[url]
+	return c, ok
 }
 
 func (f *FileStore) All() ([]model.URLMapping, error) {

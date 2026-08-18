@@ -1,10 +1,14 @@
 package handlers
 
 import (
+	"crypto/sha256"
 	"encoding/json"
+	"fmt"
 	"log"
+	"math/big"
 	"math/rand"
 	"net/http"
+	"strings"
 	"time"
 
 	"letscode/project-01-url-shortener/internal/store"
@@ -43,17 +47,66 @@ func (h *Handler) shorten(w http.ResponseWriter, r *http.Request) {
 	}
 	var req shortenRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "invalid json payload"})
 		return
 	}
-	code := h.generateCode(6)
-	if err := h.store.Save(code, req.URL); err != nil {
-		log.Printf("save error: %v", err)
-		w.WriteHeader(http.StatusInternalServerError)
+	// Validate presence
+	if strings.TrimSpace(req.URL) == "" {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": "url is required"})
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(shortenResponse{Code: code})
+	// Normalize and validate the URL
+	norm, err := NormalizeURL(req.URL)
+	if err != nil {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+		return
+	}
+	// Idempotency: if URL already exists, return existing code
+	if existingCode, ok := h.store.FindByURL(norm); ok {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(shortenResponse{Code: existingCode})
+		return
+	}
+	// Try generating random codes with bounded retries to avoid collisions
+	const maxRandomAttempts = 5
+	for i := 0; i < maxRandomAttempts; i++ {
+		code := h.generateCode(6)
+		if err := h.store.Save(code, norm); err == nil {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(shortenResponse{Code: code})
+			return
+		} else {
+			// collision, try again
+			log.Printf("code generation collision (attempt %d): %v", i+1, err)
+			continue
+		}
+	}
+	// Fallback deterministic approach: base62(hash(url)+counter)
+	for c := 0; c < 1000; c++ {
+		code := deterministicCode(norm, c, 6)
+		if err := h.store.Save(code, norm); err == nil {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(shortenResponse{Code: code})
+			return
+		} else {
+			// if url already exists, return its code (race)
+			if existing, ok := h.store.FindByURL(norm); ok {
+				w.Header().Set("Content-Type", "application/json")
+				json.NewEncoder(w).Encode(shortenResponse{Code: existing})
+				return
+			}
+			// otherwise continue trying
+			continue
+		}
+	}
+	log.Printf("failed to obtain unique code for url: %s", norm)
+	w.WriteHeader(http.StatusInternalServerError)
 }
 
 func (h *Handler) health(w http.ResponseWriter, r *http.Request) {
@@ -91,4 +144,20 @@ func (h *Handler) generateCode(n int) string {
 		b[i] = letters[h.rnd.Intn(len(letters))]
 	}
 	return string(b)
+}
+
+// deterministicCode produces a base62-looking code derived from sha256(url:counter)
+func deterministicCode(url string, counter, n int) string {
+	h := sha256.Sum256([]byte(fmt.Sprintf("%s:%d", url, counter)))
+	// convert to big.Int for base conversion
+	var bi big.Int
+	bi.SetBytes(h[:])
+	out := make([]byte, n)
+	base := big.NewInt(int64(len(letters)))
+	for i := 0; i < n; i++ {
+		var mod big.Int
+		bi.DivMod(&bi, base, &mod)
+		out[i] = letters[mod.Int64()]
+	}
+	return string(out)
 }

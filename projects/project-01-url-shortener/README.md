@@ -14,7 +14,7 @@ Prerequisites
 Quickstart:
 
 1. make run  # requires Go on PATH
-2. curl -X POST -H "Content-Type: application/json" -d '{"url":"https://example.com"}' http://localhost:8080/shorten
+2. curl -X POST -H "Content-Type: application/json" -d '{"url":"https://youtube.co.uk"}' http://localhost:8080/shorten
 3. curl http://localhost:8080/<code>
 
 If Go is not installed, use Docker:
