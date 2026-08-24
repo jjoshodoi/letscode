@@ -28,6 +28,14 @@ Quick summary:
 * The server decodes the JSON, generates a short code, saves code→URL in the file store (data/urls.json), and responds with JSON: e.g. {"code":"Ab1Cd2"} (HTTP 200).
 * After that, visiting http://localhost:8080/Ab1Cd2 issues a 302 redirect to the original URL.
 
+Testing:
+
+    go test ./...
+    go test -race ./...
+    go vet ./...
+
+GitHub Actions runs the standard test and vet commands for pushes and pull requests.
+
 Errors: 400 for bad JSON, 405 if not POST, 500 on save failure. The implementation is simple (no collision handling, no validation).
 
 Notes:

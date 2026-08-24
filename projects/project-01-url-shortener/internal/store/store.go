@@ -64,27 +64,21 @@ func (f *FileStore) persistSnapshot(snapshot map[string]string) error {
 }
 
 func (f *FileStore) Save(code, url string) error {
-	// Update map under write lock and create a snapshot while still holding
-	// the lock. Release the lock before doing file I/O to avoid deadlocks and
-	// keeping I/O off the critical path.
 	f.mu.Lock()
+	defer f.mu.Unlock()
 	// If code already exists
 	if existing, ok := f.m[code]; ok {
 		if existing == url {
 			// already stored; idempotent
-			f.mu.Unlock()
 			return nil
 		}
-		f.mu.Unlock()
 		return fmt.Errorf("code already exists")
 	}
 	// If URL already present mapped to a different code, return existing code error
 	if existingCode, ok := f.rev[url]; ok {
 		if existingCode == code {
-			f.mu.Unlock()
 			return nil
 		}
-		f.mu.Unlock()
 		return fmt.Errorf("url already exists with different code")
 	}
 	f.m[code] = url
@@ -93,7 +87,6 @@ func (f *FileStore) Save(code, url string) error {
 	for k, v := range f.m {
 		snapshot[k] = v
 	}
-	f.mu.Unlock()
 	return f.persistSnapshot(snapshot)
 }
 

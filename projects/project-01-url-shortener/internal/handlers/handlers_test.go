@@ -13,9 +13,9 @@ import (
 )
 
 func TestNormalizeURL(t *testing.T) {
-	tests := []struct{
-		in string
-		want string
+	tests := []struct {
+		in      string
+		want    string
 		wantErr bool
 	}{
 		{"example.com", "https://example.com", false},
@@ -43,16 +43,16 @@ func TestShortenHandler_Validation(t *testing.T) {
 	h := NewHandler(st)
 	server := h.Routes()
 
-	cases := []struct{
-		name string
-		body interface{}
-		wantCode int
+	cases := []struct {
+		name      string
+		body      interface{}
+		wantCode  int
 		wantError bool
 	}{
-		{"valid_missing_scheme", map[string]string{"url":"example.com"}, http.StatusOK, false},
+		{"valid_missing_scheme", map[string]string{"url": "example.com"}, http.StatusOK, false},
 		{"missing_field", map[string]string{}, http.StatusBadRequest, true},
-		{"empty_url", map[string]string{"url":""}, http.StatusBadRequest, true},
-		{"invalid_scheme", map[string]string{"url":"file:///etc/passwd"}, http.StatusBadRequest, true},
+		{"empty_url", map[string]string{"url": ""}, http.StatusBadRequest, true},
+		{"invalid_scheme", map[string]string{"url": "file:///etc/passwd"}, http.StatusBadRequest, true},
 	}
 
 	for _, c := range cases {
@@ -130,5 +130,37 @@ func TestShortenIdempotency(t *testing.T) {
 	}
 	if code1 != code2 {
 		t.Fatalf("expected idempotent code; got %s and %s", code1, code2)
+	}
+}
+
+func TestRedirectHandler(t *testing.T) {
+	st := store.NewFileStore(filepath.Join(t.TempDir(), "urls.json"))
+	if err := st.Save("abc123", "https://example.com/path"); err != nil {
+		t.Fatalf("save failed: %v", err)
+	}
+
+	rr := httptest.NewRecorder()
+	NewHandler(st).Routes().ServeHTTP(rr, httptest.NewRequest(http.MethodGet, "/abc123", nil))
+	if rr.Code != http.StatusFound {
+		t.Fatalf("status: got %d want %d", rr.Code, http.StatusFound)
+	}
+	if location := rr.Header().Get("Location"); location != "https://example.com/path" {
+		t.Fatalf("Location: got %q", location)
+	}
+}
+
+func TestHandlers_MethodNotAllowedAndNotFound(t *testing.T) {
+	server := NewHandler(store.NewFileStore(filepath.Join(t.TempDir(), "urls.json"))).Routes()
+
+	methodRR := httptest.NewRecorder()
+	server.ServeHTTP(methodRR, httptest.NewRequest(http.MethodGet, "/shorten", nil))
+	if methodRR.Code != http.StatusMethodNotAllowed {
+		t.Fatalf("GET /shorten status: got %d want %d", methodRR.Code, http.StatusMethodNotAllowed)
+	}
+
+	notFoundRR := httptest.NewRecorder()
+	server.ServeHTTP(notFoundRR, httptest.NewRequest(http.MethodGet, "/missing", nil))
+	if notFoundRR.Code != http.StatusNotFound {
+		t.Fatalf("GET /missing status: got %d want %d", notFoundRR.Code, http.StatusNotFound)
 	}
 }

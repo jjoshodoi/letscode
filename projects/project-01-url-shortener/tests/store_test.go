@@ -1,21 +1,78 @@
 package tests
 
 import (
-	"os"
 	"path/filepath"
+	"strconv"
+	"sync"
 	"testing"
+	"time"
 
 	"letscode/project-01-url-shortener/internal/store"
 )
 
 func TestFileStore_SaveLookup(t *testing.T) {
-	tmp := filepath.Join(os.TempDir(), "urls_test.json")
-	defer os.Remove(tmp)
+	tmp := filepath.Join(t.TempDir(), "urls.json")
 	fs := store.NewFileStore(tmp)
 	if err := fs.Save("abc123", "https://example.com"); err != nil {
 		t.Fatalf("save failed: %v", err)
 	}
 	if u, ok := fs.Lookup("abc123"); !ok || u != "https://example.com" {
 		t.Fatalf("lookup failed: got %v, ok=%v", u, ok)
+	}
+}
+
+func TestFileStore_SaveAndLookupConcurrently(t *testing.T) {
+	fs := store.NewFileStore(filepath.Join(t.TempDir(), "urls.json"))
+	const workers = 100
+	var wg sync.WaitGroup
+	wg.Add(workers)
+	for i := 0; i < workers; i++ {
+		i := i
+		go func() {
+			defer wg.Done()
+			code := "code" + strconv.Itoa(i)
+			url := "https://example.com/" + strconv.Itoa(i)
+			if err := fs.Save(code, url); err != nil {
+				t.Errorf("Save(%q): %v", code, err)
+				return
+			}
+			if got, ok := fs.Lookup(code); !ok || got != url {
+				t.Errorf("Lookup(%q) = %q, %v; want %q, true", code, got, ok, url)
+			}
+		}()
+	}
+	wg.Wait()
+
+	all, err := fs.All()
+	if err != nil {
+		t.Fatalf("All: %v", err)
+	}
+	if len(all) != workers {
+		t.Fatalf("All returned %d mappings, want %d", len(all), workers)
+	}
+}
+
+func TestFileStore_RapidConcurrentSavesDoNotDeadlock(t *testing.T) {
+	fs := store.NewFileStore(filepath.Join(t.TempDir(), "urls.json"))
+	const workers = 250
+	done := make(chan struct{})
+	var wg sync.WaitGroup
+	wg.Add(workers)
+	for i := 0; i < workers; i++ {
+		i := i
+		go func() {
+			defer wg.Done()
+			_ = fs.Save("rapid"+strconv.Itoa(i), "https://example.com/rapid/"+strconv.Itoa(i))
+		}()
+	}
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(10 * time.Second):
+		t.Fatal("concurrent Save calls did not complete")
 	}
 }

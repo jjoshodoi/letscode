@@ -8,6 +8,7 @@ import (
 	"math/rand"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"letscode/project-01-url-shortener/internal/logging"
@@ -17,6 +18,7 @@ import (
 type Handler struct {
 	store store.Store
 	rnd   *rand.Rand
+	rndMu sync.Mutex
 }
 
 func NewHandler(s store.Store) *Handler {
@@ -140,6 +142,8 @@ const letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 
 func (h *Handler) generateCode(n int) string {
 	b := make([]byte, n)
+	h.rndMu.Lock()
+	defer h.rndMu.Unlock()
 	for i := range b {
 		b[i] = letters[h.rnd.Intn(len(letters))]
 	}
