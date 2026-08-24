@@ -75,3 +75,17 @@ Implementation notes
 - Keep the Store interface stable to make swapping persistence implementations straightforward.
 
 If helpful, I can scaffold one of these items (validation and idempotency recommended). Which should be done next?
+
+---
+
+Configuration (env)
+
+The server reads configuration from environment variables with sensible defaults:
+
+- PORT — TCP port to listen on. Defaults to :8080. You can provide just the port number (e.g. 8080) or include the leading colon.
+- STORE_PATH — Path to the JSON file used by the file-backed store. Defaults to data/urls.json.
+- LOG_LEVEL — Logging verbosity: debug, info, warn, error. Defaults to info.
+
+Graceful shutdown
+
+The server uses an http.Server and traps SIGINT/SIGTERM. On the first termination signal it starts a shutdown with a short timeout (5s) to allow in-flight requests to finish. This ensures file-backed persistence has a chance to complete pending writes.

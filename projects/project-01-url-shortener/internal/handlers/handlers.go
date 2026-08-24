@@ -4,13 +4,13 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
-	"log"
 	"math/big"
 	"math/rand"
 	"net/http"
 	"strings"
 	"time"
 
+	"letscode/project-01-url-shortener/internal/logging"
 	"letscode/project-01-url-shortener/internal/store"
 )
 
@@ -83,7 +83,7 @@ func (h *Handler) shorten(w http.ResponseWriter, r *http.Request) {
 			return
 		} else {
 			// collision, try again
-			log.Printf("code generation collision (attempt %d): %v", i+1, err)
+			logging.Debugf("code generation collision (attempt %d): %v", i+1, err)
 			continue
 		}
 	}
@@ -105,7 +105,7 @@ func (h *Handler) shorten(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 	}
-	log.Printf("failed to obtain unique code for url: %s", norm)
+	logging.Errorf("failed to obtain unique code for url: %s", norm)
 	w.WriteHeader(http.StatusInternalServerError)
 }
 
