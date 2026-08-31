@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -15,7 +16,9 @@ import (
 
 type Config struct {
 	Port            string
+	StoreType       string
 	StorePath       string
+	StoreDSN        string
 	LogLevel        string
 	ShutdownTimeout time.Duration
 }
@@ -27,17 +30,35 @@ func loadConfig() Config {
 	} else if port[0] != ':' {
 		port = ":" + port
 	}
+
+	storeType := strings.ToLower(strings.TrimSpace(os.Getenv("STORE_TYPE")))
+	if storeType == "" {
+		storeType = "sqlite"
+	}
+
 	storePath := os.Getenv("STORE_PATH")
 	if storePath == "" {
 		storePath = "data/urls.json"
 	}
+
+	storeDSN := os.Getenv("STORE_DSN")
+	if storeDSN == "" {
+		if storeType == "sqlite" || storeType == "sqlite3" {
+			storeDSN = "data/urls.db"
+		} else {
+			storeDSN = storePath
+		}
+	}
+
 	logLevel := os.Getenv("LOG_LEVEL")
 	if logLevel == "" {
 		logLevel = "info"
 	}
 	return Config{
 		Port:            port,
+		StoreType:       storeType,
 		StorePath:       storePath,
+		StoreDSN:        storeDSN,
 		LogLevel:        logLevel,
 		ShutdownTimeout: 5 * time.Second,
 	}
@@ -47,7 +68,14 @@ func main() {
 	cfg := loadConfig()
 	logging.Init(cfg.LogLevel)
 
-	st := store.NewFileStore(cfg.StorePath)
+	storeLocation := cfg.StorePath
+	if cfg.StoreType == "sqlite" || cfg.StoreType == "sqlite3" {
+		storeLocation = cfg.StoreDSN
+	}
+	st, err := store.NewRepository(cfg.StoreType, storeLocation)
+	if err != nil {
+		logging.Fatalf("failed to initialize store: %v", err)
+	}
 	h := handlers.NewHandler(st)
 
 	srv := &http.Server{

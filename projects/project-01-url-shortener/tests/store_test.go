@@ -76,3 +76,32 @@ func TestFileStore_RapidConcurrentSavesDoNotDeadlock(t *testing.T) {
 		t.Fatal("concurrent Save calls did not complete")
 	}
 }
+
+func TestSQLiteStore_SaveLookupAndUniqueness(t *testing.T) {
+	dbPath := filepath.Join(t.TempDir(), "urls.db")
+	st, err := store.NewSQLiteStore(dbPath)
+	if err != nil {
+		t.Fatalf("NewSQLiteStore: %v", err)
+	}
+	defer st.Close()
+
+	if err := st.Save("abc123", "https://example.com"); err != nil {
+		t.Fatalf("save: %v", err)
+	}
+	if got, ok := st.Lookup("abc123"); !ok || got != "https://example.com" {
+		t.Fatalf("lookup: got %q, ok=%v; want %q, true", got, ok, "https://example.com")
+	}
+	if got, ok := st.FindByURL("https://example.com"); !ok || got != "abc123" {
+		t.Fatalf("FindByURL: got %q, ok=%v; want %q, true", got, ok, "abc123")
+	}
+
+	if err := st.Save("abc123", "https://example.com/other"); err == nil {
+		t.Fatal("expected duplicate code error")
+	}
+	if err := st.Save("xyz999", "https://example.com"); err == nil {
+		t.Fatal("expected duplicate URL error")
+	}
+	if err := st.Save("abc123", "https://example.com"); err != nil {
+		t.Fatalf("idempotent save should succeed: %v", err)
+	}
+}

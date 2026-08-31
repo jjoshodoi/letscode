@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strings"
 	"sync"
 
 	"letscode/project-01-url-shortener/internal/model"
@@ -15,6 +16,22 @@ type Store interface {
 	Lookup(code string) (string, bool)
 	All() ([]model.URLMapping, error)
 	FindByURL(url string) (string, bool)
+}
+
+// Repository is the stable boundary used by handlers and higher-level logic.
+// It allows the storage layer to swap between file and SQLite implementations.
+type Repository = Store
+
+// NewRepository builds the repository configured for the chosen backend.
+func NewRepository(storeType, location string) (Repository, error) {
+	switch strings.ToLower(strings.TrimSpace(storeType)) {
+	case "", "sqlite", "sqlite3":
+		return NewSQLiteStore(location)
+	case "file", "json":
+		return NewFileStore(location), nil
+	default:
+		return nil, fmt.Errorf("unsupported store type %q", storeType)
+	}
 }
 
 // FileStore implements Store using a single JSON file.

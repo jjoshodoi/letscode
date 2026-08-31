@@ -28,6 +28,29 @@ Quick summary:
 * The server decodes the JSON, generates a short code, saves code→URL in the file store (data/urls.json), and responds with JSON: e.g. {"code":"Ab1Cd2"} (HTTP 200).
 * After that, visiting http://localhost:8080/Ab1Cd2 issues a 302 redirect to the original URL.
 
+SQLite migration
+
+This project now supports a SQLite-backed repository via the same `Store` interface. To switch storage:
+
+1. The default backend is SQLite, so the server will use `data/urls.db` unless you override `STORE_TYPE` or `STORE_DSN`.
+2. To force the legacy JSON store, set `STORE_TYPE=file` and optionally `STORE_PATH=data/urls.json`.
+3. Start the service without env overrides to create the SQLite table automatically.
+4. If you are migrating from JSON, export the existing mappings and insert them into the `short_urls` table:
+   - `sqlite3 data/urls.db "CREATE TABLE IF NOT EXISTS short_urls (code TEXT PRIMARY KEY, url TEXT NOT NULL UNIQUE, created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP);"`
+   - `sqlite3 data/urls.db ".mode json"` and import or backfill values from `data/urls.json`.
+5. Validate the app by hitting `/shorten` and `/health` and verifying the database contains unique `code` and `url` values.
+
+The repository abstraction is intentionally small and stable:
+
+```go
+repo, err := store.NewRepository("sqlite", "data/urls.db")
+if err != nil {
+    panic(err)
+}
+```
+
+Swap the implementation without changing handler logic.
+
 Testing:
 
     go test ./...
