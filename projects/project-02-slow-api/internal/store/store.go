@@ -4,12 +4,22 @@ import (
 	"database/sql"
 	"fmt"
 	"math/rand"
+	"os"
+	"path/filepath"
 	"strings"
 
 	_ "github.com/mattn/go-sqlite3"
 )
 
 func Open(path string) (*sql.DB, error) {
+	if path != ":memory:" && path != "" {
+		dir := filepath.Dir(path)
+		if dir != "." && dir != "" {
+			if err := os.MkdirAll(dir, 0o755); err != nil {
+				return nil, fmt.Errorf("create database directory: %w", err)
+			}
+		}
+	}
 	db, err := sql.Open("sqlite3", path)
 	if err != nil {
 		return nil, fmt.Errorf("open database: %w", err)

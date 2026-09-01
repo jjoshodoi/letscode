@@ -1,53 +1,13 @@
 # Project 2 — The Slow API
 
-An intentionally working but poorly scaling Product Search API. The API returns
-the right answers and its tests pass. Your job is to investigate why it is slow,
-improve it, and prove that the improvement is real.
+This project is designed for a 60-minute live session where everyone reads the
+same tiny codebase, figures out what's slow, and improves it together.
 
-This is a **legacy/performance challenge**, not a feature race. Do not begin by
-guessing at optimisations:
-
-> **Measure → Hypothesise → Change → Measure**
-
-## Residency fit
-
-This is the second individual project in the AI Engineering Residency:
-
-1. Project 1 — **Build a Backend** (the Go URL shortener)
-2. Project 2 — **Investigate a Backend** (this project)
-
-It follows the residency process:
-**Understand → Question → Explore → Design → Build → Test → Measure → Explain → Reflect**.
-The code is evidence of engineering judgement, not the only outcome.
-
-Everyone uses the same starter, but chooses a route appropriate to their
-starting point. There is no requirement that everyone makes the same changes.
-
-## What is provided
-
-- Go HTTP API backed by SQLite
-- Seed data (1,000 products in the application, expandable for experiments)
-- Passing endpoint tests
-- A Go benchmark
-- Docker setup
-- CI running tests, `go vet`, and the benchmark
-
-The starter deliberately contains more work than necessary in its request path.
-Treat the implementation as an unfamiliar system: form your own hypotheses
-from measurements rather than searching for an answer key.
-
-## Prerequisites
-
-- Go 1.20 or newer
-- Docker (optional)
-- `curl`
-
-The SQLite driver uses CGO. On macOS, install Xcode Command Line Tools if Go
-cannot compile the driver. Docker provides a consistent alternative.
+The goal is not to write a large application. The goal is to make a small API
+obvious enough that a group can understand it quickly, find the bottlenecks, and
+try real improvements without getting lost in complexity.
 
 ## Quickstart
-
-From this directory:
 
 ```sh
 go mod download
@@ -55,7 +15,7 @@ make test
 make run
 ```
 
-In another terminal:
+Example requests:
 
 ```sh
 curl http://localhost:8080/products
@@ -64,80 +24,13 @@ curl 'http://localhost:8080/products?search=learning'
 curl http://localhost:8080/products/1
 ```
 
-Configuration is optional:
+Optional config:
 
 ```sh
 DB_PATH=data/products.db ADDR=:8080 make run
 ```
 
-To run with Docker:
-
-```sh
-docker build -t slow-api .
-docker run --rm -p 8080:8080 -v "$PWD/data:/app/data" slow-api
-```
-
-## The challenge
-
-The API has recently started experiencing performance problems as the amount of
-data has grown. Investigate the system, identify bottlenecks, and improve its
-performance. You must demonstrate that your changes made it faster without
-breaking correctness.
-
-Do not optimise blindly. For every performance change, record:
-
-### Before
-
-- What user-visible or system metric are you measuring?
-- What is the baseline under a stated workload?
-- What evidence suggests this is the bottleneck?
-
-### Change
-
-- What did you change?
-- Why did you expect it to help?
-- What trade-offs did it introduce?
-
-### After
-
-- What is the new result, using the same workload?
-- How much did it improve?
-- Did latency, throughput, memory, database size, or correctness get worse?
-
-Use an ADR, a short investigation document, or your PR description for this
-record. Documentation is part of the deliverable.
-
-## Routes
-
-| Method | Route | Purpose |
-| --- | --- | --- |
-| GET | `/products` | List products |
-| GET | `/products?category=books` | Filter by category |
-| GET | `/products?search=learning` | Search name and description |
-| GET | `/products/:id` | Fetch one product |
-
-## Learning routes
-
-### Supported route — guided investigation
-
-1. Run the application and verify the endpoints.
-2. Read the tests and implementation before changing code.
-3. Define one workload, such as 100 search requests against 1,000 products.
-4. Record latency and throughput with a repeatable command or benchmark.
-5. Inspect SQL, logs, CPU, memory, and query plans to find where time goes.
-6. Write a hypothesis before editing.
-7. Make one focused change.
-8. Run the tests and repeat the exact baseline workload.
-9. Compare the results and record the trade-offs.
-10. Repeat only when new evidence justifies another change.
-
-### Independent route
-
-Choose the workload and tools yourself. Establish a baseline, investigate at
-least one bottleneck, make a measured improvement, and explain why alternative
-solutions were not chosen. Preserve or extend the tests as needed.
-
-Useful starting commands:
+And for benchmarking:
 
 ```sh
 make benchmark
@@ -145,62 +38,194 @@ go test ./... -count=1
 go test ./internal/api -run '^$' -bench BenchmarkListProducts -benchmem -benchtime=5s
 ```
 
-### Stretch route
+With Docker:
 
-Investigate several layers, such as query construction, indexes, allocation,
-concurrency, connection handling, caching, response size, and observability.
-Compare at least two approaches and explain their operational costs. Add a
-repeatable performance gate to CI with a threshold you can defend rather than
-an arbitrary number.
-
-## 100× Data Challenge
-
-The starter contains 1,000 products. Repeat your investigation with 100,000
-and then (if your machine permits) 1,000,000 or 10,000,000 records.
-
-Ask:
-
-- What breaks first, and why?
-- Does the optimisation still work at a larger scale?
-- What becomes the new bottleneck?
-- Which metric would you monitor in production?
-- Would you change the schema or architecture?
-- What would you deliberately not change yet?
-
-Be explicit about hardware, dataset size, request mix, concurrency, and warm-up
-when comparing results. A benchmark number without its conditions is not useful
-evidence.
-
-## CI and engineering quality
-
-Every push and pull request runs:
-
-```text
-Code → Tests → Vet → Benchmark
+```sh
+docker build -t slow-api .
+docker run --rm -p 8080:8080 -v "$PWD/data:/app/data" slow-api
 ```
 
-Keep the API behaviour correct. Add tests for behaviour affected by an
-optimisation. Keep changes reviewable, and use the project review questions:
 
-1. What problem did we solve and what assumptions did we make?
-2. Why this change, and what alternatives existed?
-3. What could fail in production?
-4. How would this perform, scale, deploy, and operate?
-5. What did AI suggest, and what did we verify ourselves?
-6. What did we learn?
+## Little guidance
 
-## AI use
+This is intentionally small, fast to read, and easy to reason about.
 
-AI may help explain profiling output, suggest hypotheses, generate benchmark
-scaffolding, review a query, or challenge trade-offs. It cannot replace the
-investigation. If AI produces a change, you must understand it, test it, and
-be able to explain why it is appropriate.
+Start by reading these files:
 
-## Definition of done
+- `internal/api/api.go`
+- `internal/store/store.go`
+- `internal/api/api_test.go`
 
-- The original tests still pass.
-- At least one bottleneck is supported by evidence.
-- At least one change is measured before and after under the same workload.
-- Correctness and relevant regressions are checked.
-- Trade-offs and rejected alternatives are documented.
-- The result is explainable to the group during review.
+The app is a Go HTTP API backed by SQLite. It has a few routes and a small
+amount of business logic. That is the point: the performance problems should be
+fairly obvious once you look at the query path.
+
+Before changing anything, ask:
+
+- What happens when `/products?search=learning` runs?
+- Are we doing unnecessary work for every product in the database?
+- Are we issuing extra queries inside a loop?
+- Are we searching/filtering in Go instead of in SQL?
+- Are there missing indexes or repeated work that would scale badly?
+
+A good first pass is to look for anything that scales with the number of rows,
+especially in `FindProducts` and `FindProduct`.
+
+If you want the minimal version of the challenge, here are the likely hotspots:
+
+- Selecting every row from `products` even when a category is supplied
+- Running `COUNT(*)` for each product in a loop
+- Doing case-insensitive string matching in Go over every product row
+- No database indexes on the columns used for filtering
+
+This is enough to make the session interesting without requiring a large codebase
+or a lot of setup.
+
+## Medium guidance
+
+This is the format for a live tuning session:
+
+1. Run the app and hit the API.
+2. Read the two core files: the handler and the store layer.
+3. Measure the baseline with the existing benchmark.
+4. Identify the obvious bottleneck and write down a hypothesis.
+5. Change one thing.
+6. Repeat the benchmark under the same conditions.
+7. Compare results and explain why the change helped.
+
+Useful commands:
+
+```sh
+go mod download
+make test
+make run
+```
+
+Then in another terminal:
+
+```sh
+curl http://localhost:8080/products
+curl 'http://localhost:8080/products?category=books'
+curl 'http://localhost:8080/products?search=learning'
+curl http://localhost:8080/products/1
+```
+
+And for benchmarking:
+
+```sh
+make benchmark
+go test ./... -count=1
+go test ./internal/api -run '^$' -bench BenchmarkListProducts -benchmem -benchtime=5s
+```
+
+The obvious area to investigate is `internal/store/store.go`.
+
+Look for these patterns:
+
+- `SELECT id, name, description, category, price, stock FROM products` with a full scan
+- `for rows.Next()` followed by `strings.Contains(...)`
+- `db.QueryRow("SELECT COUNT(*) FROM reviews WHERE product_id = ?")` inside a loop
+- no `INDEX` statements for category or product lookup
+
+That is the heart of the challenge. The session should feel like a slow, focused
+engineering review: read the code, spot the bottleneck, make a measured fix, and
+explain the trade-off.
+
+## A lot of guidance
+
+If you want deeper direction before the session, this is the path to follow.
+
+### Where the bottlenecks are
+
+The code is intentionally not trying to hide the issue. The slow path is in the
+store layer:
+
+- `FindProducts` fetches all products from the table and filters in Go.
+- `strings.Contains(strings.ToLower(...))` runs on every row for every search.
+- `FindProducts` also issues one review count query per product.
+- The database has no indexes for common access patterns like category filtering
+  or product ID lookup as the dataset grows.
+
+This means the problem becomes worse as the dataset grows, and the bottleneck is
+very easy to demonstrate.
+
+### Good improvement ideas
+
+A few realistic improvements are obvious and worth trying:
+
+1. Move filtering into SQL.
+   - Filter by category in the query instead of doing it in Go.
+   - Use SQL `WHERE` clauses for exact and partial matches where appropriate.
+
+2. Avoid the N+1 query problem.
+   - Instead of querying review counts one product at a time, aggregate counts in a
+     single query using `LEFT JOIN` and `GROUP BY`.
+
+3. Add indexes.
+   - Index `products(category)`
+   - Index `products(id)` (already primary key, so this is effectively there)
+   - Consider a full-text or LIKE-friendly index if search becomes prominent
+
+4. Reduce work in the hot path.
+   - Fetch only the fields required for the endpoint.
+   - Stop building large in-memory result sets when the request can be restricted.
+
+5. Benchmark before and after.
+   - Measure the same search workload before and after each change.
+   - Keep the workload consistent so the comparison is fair.
+
+### Example SQL direction
+
+These are exactly the kinds of optimisations to explore:
+
+```sql
+CREATE INDEX idx_products_category ON products(category);
+```
+
+And instead of:
+
+```go
+for rows.Next() {
+    // filter in Go
+}
+```
+
+prefer:
+
+```sql
+SELECT ... FROM products WHERE category = ?
+```
+
+And for reviews:
+
+```sql
+SELECT p.id, COUNT(r.id) as review_count
+FROM products p
+LEFT JOIN reviews r ON r.product_id = p.id
+GROUP BY p.id;
+```
+
+### Suggested live session flow
+
+Use this as a 60-minute plan:
+
+- 10 minutes: read the API and store layer
+- 10 minutes: run the benchmark and inspect the hot path
+- 15 minutes: form a hypothesis and patch one bottleneck
+- 10 minutes: rerun the benchmark and compare results
+- 10 minutes: discuss trade-offs, rejected ideas, and what to improve next
+
+### Definition of success
+
+The session succeeds if the group can clearly answer:
+
+- What is slow?
+- Why is it slow?
+- What did we change?
+- What changed in the numbers?
+- What are the trade-offs?
+- What would we do next if we had 30 more minutes?
+
+The beauty of this project is that the bottlenecks are not hidden. The code is
+small enough to read quickly, but the optimization opportunities are strong
+enough to drive a real engineering discussion.
