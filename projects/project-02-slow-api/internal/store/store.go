@@ -115,30 +115,42 @@ type Product struct {
 }
 
 func FindProducts(db *sql.DB, category, search string) ([]Product, error) {
-	rows, err := db.Query("SELECT id, name, description, category, price, stock FROM products")
+	query := `
+		SELECT id, name, description, category, price, stock
+		FROM products
+		WHERE 1 = 1
+	`
+	args := []any{}
+
+	if category != "" {
+		query += " AND LOWER(category) = ?"
+		args = append(args, strings.ToLower(category))
+	}
+
+	if search != "" {
+		searchTerm := "%" + strings.ToLower(search) + "%"
+		query += " AND (LOWER(name) LIKE ? OR LOWER(description) LIKE ?)"
+		args = append(args, searchTerm, searchTerm)
+	}
+
+	rows, err := db.Query(query, args...)
 	if err != nil {
 		return nil, err
 	}
+	defer rows.Close()
+
 	var products []Product
 	for rows.Next() {
 		var p Product
 		if err := rows.Scan(&p.ID, &p.Name, &p.Description, &p.Category, &p.Price, &p.Stock); err != nil {
 			return nil, err
 		}
-		if category != "" && !strings.EqualFold(p.Category, category) {
-			continue
-		}
-		if search != "" && !strings.Contains(strings.ToLower(p.Name+" "+p.Description), strings.ToLower(search)) {
-			continue
-		}
 		products = append(products, p)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
+
 	for i := range products {
 		if err := db.QueryRow("SELECT COUNT(*) FROM reviews WHERE product_id = ?", products[i].ID).
 			Scan(&products[i].ReviewCount); err != nil {
