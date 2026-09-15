@@ -112,12 +112,16 @@ type Product struct {
 	Price       float64 `json:"price"`
 	Stock       int     `json:"stock"`
 	ReviewCount int     `json:"review_count"`
+	AverageRating float64 `json:"average_rating"`
 }
 
 func FindProducts(db *sql.DB, category, search string) ([]Product, error) {
 	query := `
-		SELECT id, name, description, category, price, stock
-		FROM products
+		SELECT p.id, p.name, p.description, p.category, p.price, p.stock,
+		       COUNT(r.id) AS review_count,
+		       COALESCE(AVG(r.rating), 0) AS average_rating
+		FROM products p
+		LEFT JOIN reviews r ON r.product_id = p.id
 		WHERE 1 = 1
 	`
 	args := []any{}
@@ -129,9 +133,11 @@ func FindProducts(db *sql.DB, category, search string) ([]Product, error) {
 
 	if search != "" {
 		searchTerm := "%" + strings.ToLower(search) + "%"
-		query += " AND (LOWER(name) LIKE ? OR LOWER(description) LIKE ?)"
+		query += " AND (LOWER(p.name) LIKE ? OR LOWER(p.description) LIKE ?)"
 		args = append(args, searchTerm, searchTerm)
 	}
+
+	query += " GROUP BY p.id, p.name, p.description, p.category, p.price, p.stock"
 
 	rows, err := db.Query(query, args...)
 	if err != nil {
@@ -142,7 +148,7 @@ func FindProducts(db *sql.DB, category, search string) ([]Product, error) {
 	var products []Product
 	for rows.Next() {
 		var p Product
-		if err := rows.Scan(&p.ID, &p.Name, &p.Description, &p.Category, &p.Price, &p.Stock); err != nil {
+		if err := rows.Scan(&p.ID, &p.Name, &p.Description, &p.Category, &p.Price, &p.Stock, &p.ReviewCount, &p.AverageRating); err != nil {
 			return nil, err
 		}
 		products = append(products, p)
@@ -150,22 +156,20 @@ func FindProducts(db *sql.DB, category, search string) ([]Product, error) {
 	if err := rows.Err(); err != nil {
 		return nil, err
 	}
-
-	for i := range products {
-		if err := db.QueryRow("SELECT COUNT(*) FROM reviews WHERE product_id = ?", products[i].ID).
-			Scan(&products[i].ReviewCount); err != nil {
-			return nil, err
-		}
-	}
 	return products, nil
 }
 
 func FindProduct(db *sql.DB, id int) (Product, error) {
 	var p Product
-	err := db.QueryRow("SELECT id, name, description, category, price, stock FROM products WHERE id = ?", id).
-		Scan(&p.ID, &p.Name, &p.Description, &p.Category, &p.Price, &p.Stock)
-	if err == nil {
-		err = db.QueryRow("SELECT COUNT(*) FROM reviews WHERE product_id = ?", p.ID).Scan(&p.ReviewCount)
-	}
+	err := db.QueryRow(`
+		SELECT p.id, p.name, p.description, p.category, p.price, p.stock,
+		       COUNT(r.id) AS review_count,
+		       COALESCE(AVG(r.rating), 0) AS average_rating
+		FROM products p
+		LEFT JOIN reviews r ON r.product_id = p.id
+		WHERE p.id = ?
+		GROUP BY p.id, p.name, p.description, p.category, p.price, p.stock
+	`, id).
+		Scan(&p.ID, &p.Name, &p.Description, &p.Category, &p.Price, &p.Stock, &p.ReviewCount, &p.AverageRating)
 	return p, err
 }
