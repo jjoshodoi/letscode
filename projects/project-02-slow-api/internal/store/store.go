@@ -31,12 +31,20 @@ func Open(path string) (*sql.DB, error) {
 		db.Close()
 		return nil, fmt.Errorf("create schema: %w", err)
 	}
+	if _, err := db.Exec(`CREATE INDEX IF NOT EXISTS idx_products_category ON products(category)`); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("create products category index: %w", err)
+	}
 	if _, err := db.Exec(`CREATE TABLE IF NOT EXISTS reviews (
 		id INTEGER PRIMARY KEY, product_id INTEGER NOT NULL, rating INTEGER NOT NULL,
 		FOREIGN KEY (product_id) REFERENCES products(id)
 	)`); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("create reviews schema: %w", err)
+	}
+	if _, err := db.Exec(`CREATE INDEX IF NOT EXISTS idx_reviews_product_id ON reviews(product_id)`); err != nil {
+		db.Close()
+		return nil, fmt.Errorf("create reviews product index: %w", err)
 	}
 	return db, nil
 }
